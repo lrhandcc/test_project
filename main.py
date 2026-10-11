@@ -6,5 +6,7 @@ app = FastAPI()
 @app.get("/")
 def home():
     return {
-        "message": "Hello Linux FastAPI"
+        "message": "Hello Git dev branch"
     }
+
+
