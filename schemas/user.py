@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UserCreate(BaseModel):
-    username: str
-    age: int
+    username: str = Field(min_length=3, max_length=50)
+    age: int = Field(gt=0, le=120)
 
 
 class UserResponse(BaseModel):
@@ -18,6 +18,7 @@ class UserResponse(BaseModel):
 class UserCreateResponse(BaseModel):
     message: str
     user: UserResponse
+
 
 class MessageResponse(BaseModel):
     message: str
