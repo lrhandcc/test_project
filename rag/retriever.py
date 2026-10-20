@@ -1,4 +1,5 @@
 
+import re
 from pathlib import Path
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -6,9 +7,36 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from rag.text_splitter import read_text_file, split_text
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DOCUMENT_PATH = PROJECT_ROOT / "rag" / "data" / "computer_network.txt"
+
+
+def text_features(text: str) -> set[str]:
+    """提取英文完整词和中文连续文本中的相邻双字词。"""
+    features = set()
+    parts = re.findall(r"[A-Za-z0-9]+|[\u4e00-\u9fff]+", text.lower())
+
+    for part in parts:
+        if re.fullmatch(r"[a-z0-9]+", part):
+            features.add(f"en:{part}")
+        elif len(part) == 1:
+            features.add(f"zh:{part}")
+        else:
+            for i in range(len(part) - 1):
+                features.add(f"zh:{part[i:i + 2]}")
+
+    return features
+
+
+def calculate_overlap(question: str, chunk: str) -> float:
+    """计算问题与文本片段的词语特征重合比例。"""
+    question_features = text_features(question)
+    chunk_features = text_features(chunk)
+
+    if not question_features:
+        return 0.0
+
+    return len(question_features & chunk_features) / len(question_features)
 
 
 class TextRetriever:
@@ -19,18 +47,14 @@ class TextRetriever:
             raise ValueError("知识库不能为空")
 
         self.chunks = chunks
-
-        # 根据所有文本块建立词语特征空间。
         self.vectorizer = TfidfVectorizer(
             analyzer="char",
             ngram_range=(1, 2),
         )
-
-        # 每一行对应一个文本块，每一列对应一个字符特征。
         self.chunk_vectors = self.vectorizer.fit_transform(chunks)
 
     def search(self, question: str, top_k: int = 2) -> list[dict]:
-        """返回与问题最相关的文本块及其相似度。"""
+        """返回相似度、词语重合比例及对应文本片段。"""
         if not question.strip():
             raise ValueError("问题不能为空")
 
@@ -38,20 +62,21 @@ class TextRetriever:
             raise ValueError("top_k 必须大于 0")
 
         question_vector = self.vectorizer.transform([question])
-
-        # 计算问题向量与每个文本块向量之间的余弦相似度。
         scores = cosine_similarity(
             question_vector,
             self.chunk_vectors,
         )[0]
 
-        # 按相似度从高到低排列，取前 top_k 个。
         ranked_indices = scores.argsort()[::-1][:top_k]
 
         return [
             {
                 "chunk": self.chunks[index],
                 "score": float(scores[index]),
+                "overlap": calculate_overlap(
+                    question,
+                    self.chunks[index],
+                ),
             }
             for index in ranked_indices
         ]

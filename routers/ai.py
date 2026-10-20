@@ -29,6 +29,15 @@ from rag.retriever import build_retriever
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# 第一版实验候选阈值，后续通过测试集进一步验证。
+RAG_SCORE_THRESHOLD = 0.20
+
+# 检索证据不足时使用统一的拒答文案。
+RAG_REFUSAL_MESSAGE = (
+    "抱歉，当前知识库中没有检索到足够相关的资料，"
+    "暂时无法根据知识库可靠地回答这个问题。"
+)
+
 
 @lru_cache(maxsize=1)
 def get_retriever():
@@ -59,15 +68,39 @@ def load_history(db: Session, session_id: int):
     ]
 
 
-def retrieve_context(question: str) -> str:
-    """检索知识库，并整理成 AI 可以参考的上下文。"""
+def retrieve_context(question: str) -> str | None:
+    """检索知识库，过滤相似度或词语重合度不足的片段。"""
     retriever = get_retriever()
     results = retriever.search(question, top_k=2)
 
-    # 分数用于观察检索效果，不代表答案正确的概率。
+    # 两项条件都要满足，才允许作为知识库上下文。
+    score_threshold = 0.20
+    overlap_threshold = 0.15
+
+    relevant_results = [
+        result
+        for result in results
+        if result["score"] >= score_threshold
+        and result["overlap"] >= overlap_threshold
+    ]
+
+    if not relevant_results:
+        logger.info(
+            "未找到足够相关的知识片段，问题：%s，检索结果：%s",
+            question,
+            [
+                {
+                    "score": round(item["score"], 4),
+                    "overlap": round(item["overlap"], 4),
+                }
+                for item in results
+            ],
+        )
+        return None
+
     context_parts = []
 
-    for index, result in enumerate(results, start=1):
+    for index, result in enumerate(relevant_results, start=1):
         context_parts.append(
             f"【参考片段 {index}】\n{result['chunk']}"
         )
@@ -102,23 +135,56 @@ def raise_ai_http_error(exc: Exception):
     raise HTTPException(status_code=status_code, detail=detail)
 
 
+def save_exchange_or_raise(
+    db: Session,
+    session_id: int,
+    question: str,
+    answer: str,
+):
+    """保存一轮聊天；保存失败时返回明确的 HTTP 错误。"""
+    try:
+        save_chat_exchange(db, session_id, question, answer)
+    except Exception as exc:
+        logger.exception("聊天记录保存失败")
+        raise HTTPException(
+            status_code=500,
+            detail="聊天记录保存失败，请稍后重试",
+        ) from exc
+
+
 @router.post("/chat", response_model=ChatResponse)
 def chat_api(
     request: ChatRequest,
     db: Session = Depends(get_db),
 ):
-    """普通聊天：检索知识库、生成回答，并保存聊天记录。"""
+    """普通聊天：检索知识库、判断相关性、生成回答并保存记录。"""
     chat_session = get_or_create_session(db, request.session_id)
     session_id = chat_session.id
     history = load_history(db, session_id)
 
     try:
         context = retrieve_context(request.question)
+
+        # 检索证据不足：不调用大模型，直接拒答。
+        if context is None:
+            answer = RAG_REFUSAL_MESSAGE
+            save_exchange_or_raise(
+                db, session_id, request.question, answer
+            )
+            return {
+                "session_id": session_id,
+                "answer": answer,
+                "model": "rag-refusal",
+            }
+
         result = ask_ai(
             request.question,
             history,
             context=context,
         )
+
+    except HTTPException:
+        raise
     except (
         RuntimeError,
         APITimeoutError,
@@ -136,19 +202,12 @@ def chat_api(
             detail="知识检索或聊天处理失败，请稍后重试",
         ) from exc
 
-    try:
-        save_chat_exchange(
-            db,
-            session_id,
-            request.question,
-            result["answer"],
-        )
-    except Exception as exc:
-        logger.exception("普通聊天记录保存失败")
-        raise HTTPException(
-            status_code=500,
-            detail="聊天记录保存失败，请稍后重试",
-        ) from exc
+    save_exchange_or_raise(
+        db,
+        session_id,
+        request.question,
+        result["answer"],
+    )
 
     return {
         "session_id": session_id,
@@ -162,12 +221,11 @@ def chat_stream_api(
     request: ChatRequest,
     db: Session = Depends(get_db),
 ):
-    """流式聊天：先检索知识库，再逐段生成并保存聊天记录。"""
+    """流式聊天：先检索；证据不足时直接流式返回拒答。"""
     chat_session = get_or_create_session(db, request.session_id)
     session_id = chat_session.id
     history = load_history(db, session_id)
 
-    # 在开始流式响应前检索，避免检索失败时已开始发送内容。
     try:
         context = retrieve_context(request.question)
     except Exception as exc:
@@ -181,18 +239,33 @@ def chat_stream_api(
         answer_parts = []
 
         try:
-            for content in stream_ai(
-                request.question,
-                history,
-                context=context,
-            ):
-                answer_parts.append(content)
+            if context is None:
+                # 拒答路径不调用 stream_ai。
+                answer_parts.append(RAG_REFUSAL_MESSAGE)
 
-                event = {
-                    "type": "content",
-                    "content": content,
-                }
-                yield json.dumps(event, ensure_ascii=False) + "\n"
+                yield json.dumps(
+                    {
+                        "type": "content",
+                        "content": RAG_REFUSAL_MESSAGE,
+                    },
+                    ensure_ascii=False,
+                ) + "\n"
+
+            else:
+                for content in stream_ai(
+                    request.question,
+                    history,
+                    context=context,
+                ):
+                    answer_parts.append(content)
+
+                    yield json.dumps(
+                        {
+                            "type": "content",
+                            "content": content,
+                        },
+                        ensure_ascii=False,
+                    ) + "\n"
 
             answer = "".join(answer_parts)
 
@@ -206,20 +279,24 @@ def chat_stream_api(
                 answer,
             )
 
-            event = {
-                "type": "done",
-                "session_id": session_id,
-            }
-            yield json.dumps(event, ensure_ascii=False) + "\n"
+            yield json.dumps(
+                {
+                    "type": "done",
+                    "session_id": session_id,
+                },
+                ensure_ascii=False,
+            ) + "\n"
 
         except Exception:
             logger.exception("流式 AI 聊天请求失败")
 
-            event = {
-                "type": "error",
-                "message": "AI 生成或聊天记录保存失败，请稍后重试",
-            }
-            yield json.dumps(event, ensure_ascii=False) + "\n"
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "message": "AI 生成或聊天记录保存失败，请稍后重试",
+                },
+                ensure_ascii=False,
+            ) + "\n"
 
         finally:
             db.close()
