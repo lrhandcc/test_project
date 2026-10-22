@@ -1,0 +1,99 @@
+
+[
+  {
+    "id": "A01",
+    "category": "answerable",
+    "question": "TCP 属于哪一层协议？",
+    "expected_keywords": ["传输层"],
+    "expected_behavior": "answer",
+    "evidence": "TCP 是一种面向连接的传输层协议。"
+  },
+  {
+    "id": "A02",
+    "category": "answerable",
+    "question": "TCP 建立连接通常需要经过几次握手？",
+    "expected_keywords": ["三次握手"],
+    "expected_behavior": "answer",
+    "evidence": "TCP 通常通过三次握手建立连接。"
+  },
+  {
+    "id": "A03",
+    "category": "answerable",
+    "question": "TCP 第一次握手由谁发送什么报文？",
+    "expected_keywords": ["客户端", "SYN"],
+    "expected_behavior": "answer",
+    "evidence": "第一次握手由客户端发送 SYN 报文。"
+  },
+  {
+    "id": "A04",
+    "category": "answerable",
+    "question": "TCP 第二次握手中，服务器返回什么报文？",
+    "expected_keywords": ["服务器", "SYN-ACK"],
+    "expected_behavior": "answer",
+    "evidence": "第二次握手由服务器返回 SYN-ACK 报文。"
+  },
+  {
+    "id": "A05",
+    "category": "answerable",
+    "question": "HTTP 请求通常包含哪些组成部分？",
+    "expected_keywords": ["请求方法", "路径", "请求头", "请求体"],
+    "expected_behavior": "answer",
+    "evidence": "HTTP 请求通常包含请求方法、路径、请求头和请求体等信息。"
+  },
+  {
+    "id": "A06",
+    "category": "answerable",
+    "question": "HTTP 属于哪一层协议？",
+    "expected_keywords": ["应用层"],
+    "expected_behavior": "answer",
+    "evidence": "HTTP 是一种应用层协议。"
+  },
+  {
+    "id": "I01",
+    "category": "insufficient",
+    "question": "TCP 第二次握手中，服务器初始序列号的具体数值是多少？",
+    "expected_keywords": [],
+    "expected_behavior": "refuse",
+    "evidence": "知识库只说明服务器会告知其初始序列号，没有给出具体数值。"
+  },
+  {
+    "id": "I02",
+    "category": "insufficient",
+    "question": "TCP 三次握手通常需要多少毫秒才能完成？",
+    "expected_keywords": [],
+    "expected_behavior": "refuse",
+    "evidence": "知识库介绍了三次握手的过程，没有提供耗时数据。"
+  },
+  {
+    "id": "I03",
+    "category": "insufficient",
+    "question": "HTTP 请求使用哪个默认端口？",
+    "expected_keywords": [],
+    "expected_behavior": "refuse",
+    "evidence": "知识库介绍了 HTTP 的作用和请求组成，没有说明端口号。"
+  },
+  {
+    "id": "O01",
+    "category": "out_of_domain",
+    "question": "光合作用的主要过程是什么？",
+    "expected_keywords": [],
+    "expected_behavior": "refuse",
+    "evidence": "当前知识库没有关于光合作用的信息。"
+  },
+  {
+    "id": "O02",
+    "category": "out_of_domain",
+    "question": "SQL 中 JOIN 操作的作用是什么？",
+    "expected_keywords": [],
+    "expected_behavior": "refuse",
+    "evidence": "当前知识库没有关于 SQL 的信息。"
+  },
+  {
+    "id": "O03",
+    "category": "out_of_domain",
+    "question": "Python 中的装饰器应该如何实现？",
+    "expected_keywords": [],
+    "expected_behavior": "refuse",
+    "evidence": "当前知识库没有关于 Python 装饰器的信息。"
+  }
+]
