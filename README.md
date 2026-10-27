@@ -231,3 +231,65 @@ RAG 评测应区分检索命中、证据筛选和最终回答质量。有限的�
 本项目围绕 Python 后端与 AI 应用开发，实践了从 HTTP 请求处理、数据库持久化，到 RAG 检索增强生成、Agent 工具调用和自动化测试的完整开发流程。
 
 项目关注的不只是功能实现，也包括模块职责划分、数据库访问管理、工具权限控制、关键行为验证和系统局限分析。后续将继续通过可复现的测试、规范的工程文档和逐步完善的部署流程提升项目的可维护性与可交付性。
+
+## Docker 部署（Linux）
+
+### 环境要求
+
+- Linux 系统
+- Docker Engine
+- Docker Compose 插件
+- 已配置项目所需的 `.env` 文件
+- MySQL 已启动，且数据库和用户配置正确
+
+### 启动项目
+
+在项目根目录执行：
+
+```bash
+# 检查 Compose 配置
+sudo docker compose config -q
+
+# 构建并启动服务
+sudo docker compose up -d --build
+
+# 查看容器状态
+sudo docker compose ps
+
+# 查看运行日志
+sudo docker compose logs --tail 100 app
+```
+
+### 验证接口
+
+```bash
+# 健康检查对应的根路径
+curl http://127.0.0.1:8000/
+
+# 用户列表接口（需要 MySQL）
+curl http://127.0.0.1:8000/users
+```
+
+浏览器访问：
+
+- API 文档：`http://<服务器IP>:8000/docs`
+- 根路径：`http://<服务器IP>:8000/`
+
+### 常用操作
+
+```bash
+# 查看日志
+sudo docker compose logs -f app
+
+# 重启服务
+sudo docker compose restart app
+
+# 停止并移除 Compose 管理的容器
+sudo docker compose down
+```
+
+### 配置说明
+
+项目通过 `.env` 读取数据库连接参数和模型 API 密钥。不要将 `.env` 提交到 Git，也不要把密钥写入 Dockerfile。
+
+当前部署使用 Linux 的 `network_mode: host`，以便应用访问宿主机本地 MySQL。该网络配置适用于当前 Linux 部署环境，不应直接照搬到 Windows 或 macOS。

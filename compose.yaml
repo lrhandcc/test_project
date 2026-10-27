@@ -1,0 +1,33 @@
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: test-project:latest
+    container_name: test-project
+
+    # 使用宿主机网络，继续连接当前本机 MySQL
+    network_mode: host
+
+    # 从项目根目录的 .env 读取运行配置
+    env_file:
+      - .env
+
+    # Docker 服务重启后自动恢复容器
+    restart: unless-stopped
+
+    # 更规范地管理容器内的进程
+    init: true
+
+    # 检查 FastAPI 根路径能否正常响应
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
